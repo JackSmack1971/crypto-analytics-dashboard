@@ -9,9 +9,10 @@ from fastapi.testclient import TestClient
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
-from app.main import app
+from app.main import app  # noqa: E402
 
 FIXTURES_PATH = Path(__file__).parent / "fixtures"
+PROVIDER_FIXTURES_PATH = FIXTURES_PATH / "providers"
 
 
 @pytest.fixture
@@ -51,6 +52,33 @@ def load_fixture():  # pragma: no cover
             return json.load(fh)
 
     return _loader
+
+
+@pytest.fixture
+def load_provider_fixture():  # pragma: no cover
+    """Load provider mock from tests/fixtures/providers."""
+
+    def _loader(name: str):
+        path = PROVIDER_FIXTURES_PATH / name
+        with path.open() as fh:
+            return json.load(fh)
+
+    return _loader
+
+
+@pytest.fixture
+def coingecko_candles(load_provider_fixture):  # pragma: no cover
+    return load_provider_fixture("coingecko_candles.json")
+
+
+@pytest.fixture
+def etherscan_gas(load_provider_fixture):  # pragma: no cover
+    return load_provider_fixture("etherscan_gas.json")
+
+
+@pytest.fixture
+def mempool_space(load_provider_fixture):  # pragma: no cover
+    return load_provider_fixture("mempool_space.json")
 
 
 def pytest_configure(config: pytest.Config) -> None:  # pragma: no cover
