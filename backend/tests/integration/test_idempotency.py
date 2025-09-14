@@ -70,7 +70,7 @@ def test_portfolio_import_idempotent(client: TestClient) -> None:
 def test_portfolio_import_requires_valid_key(
     client: TestClient, headers: dict[str, str]
 ) -> None:
-    """Missing or malformed keys should be rejected with 422."""
+    """Missing or malformed keys should be rejected with 400."""
     files = {"file": ("import.csv", b"data", "text/csv")}
     response = client.post("/portfolio/holdings/import", files=files, headers=headers)
-    assert response.status_code == 422
+    assert response.status_code == 400

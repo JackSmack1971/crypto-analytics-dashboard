@@ -9,5 +9,16 @@
     "resolution": "1d",
     "asof": 1.0,
     "source": "coingecko"
+  },
+  {
+    "t": 2,
+    "o": 11.0,
+    "h": 13.0,
+    "l": 9.0,
+    "c": 12.0,
+    "v": 110.0,
+    "resolution": "1d",
+    "asof": 2.0,
+    "source": "coingecko"
   }
 ]

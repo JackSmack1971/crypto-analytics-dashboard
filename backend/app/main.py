@@ -61,11 +61,15 @@ class GasPrices(BaseModel):
     safe: float
     propose: float
     fast: float
+    asof: float
+    source: str
 
 
 class MempoolData(BaseModel):
     txs: int
     size: int
+    asof: float
+    source: str
 
 
 ERROR_RESPONSES = {
@@ -192,11 +196,17 @@ async def idempotent_process_import(
 
 
 async def get_eth_gas_data() -> GasPrices:  # pragma: no cover
-    return GasPrices(safe=1.0, propose=2.0, fast=3.0)
+    return GasPrices(
+        safe=1.0,
+        propose=2.0,
+        fast=3.0,
+        asof=time.time(),
+        source="mock",
+    )
 
 
 async def get_btc_mempool_data() -> MempoolData:  # pragma: no cover
-    return MempoolData(txs=0, size=0)
+    return MempoolData(txs=0, size=0, asof=time.time(), source="mock")
 
 
 async def get_metrics_data() -> str:  # pragma: no cover
