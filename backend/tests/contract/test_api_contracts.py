@@ -92,7 +92,10 @@ def test_component_schemas(model):
             ImportResult,
             False,
             "application/json",
-            {"files": {"file": ("data.csv", b"date,asset\n", "text/csv")}},
+            {
+                "files": {"file": ("data.csv", b"date,asset\n", "text/csv")},
+                "headers": {"Idempotency-Key": "contract"},
+            },
         ),
         (
             "get",
