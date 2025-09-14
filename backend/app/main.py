@@ -5,6 +5,9 @@ from typing import Annotated, Awaitable, Callable, List
 from fastapi import Depends, FastAPI, Header, UploadFile
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
+from redis import Redis
+
+from app import config_env
 
 app = FastAPI(title="Crypto Analytics BFF", version="0.1.0")
 
@@ -62,9 +65,24 @@ def rate_limiter() -> None:  # pragma: no cover
     """Rate limiter dependency to allow override in tests."""
 
 
-async def get_health_data() -> Health:  # pragma: no cover
+def get_redis_client() -> Redis:
+    """Create a Redis client from environment configuration."""
+
+    settings = config_env.load()
+    return Redis.from_url(settings.redis_url)
+
+
+async def get_health_data() -> Health:
+    """Return service health status, pinging Redis for dependency check."""
+
+    status = "ok"
+    try:
+        redis = get_redis_client()
+        redis.ping()  # Redis ping to ensure connectivity
+    except Exception:
+        status = "degraded"
     return Health(
-        status="ok",
+        status=status,
         versions={"app": "0.1.0", "python": os.sys.version.split()[0]},
         uptime=round(time.time() - START, 3),
     )
