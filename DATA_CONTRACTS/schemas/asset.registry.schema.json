@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "DATA_CONTRACTS/schemas/asset.registry.schema.json",
+  "type": "object",
+  "required": ["version", "checksum", "chains", "assets"],
+  "properties": {
+    "version": { "type": "string", "description": "semver (x.y.z)" },
+    "checksum": { "type": "string" },
+    "introduced_in": { "type": "string" },
+    "deprecated_in": { "type": "string" },
+    "chains": { "type": "array", "items": { "type": "object" } },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["asset_id"],
+        "properties": {
+          "asset_id": { "type": "string", "description": "opaque id used across system" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "provider_ids": { "type": "object" },
+          "contracts": { "type": "array", "items": { "type": "object" } },
+          "introduced_in": { "type": "string" },
+          "deprecated_in": { "type": "string" },
+          "deprecation_status": { "type": "string" },
+          "superseded_by": { "type": "string" }
+        }
+      }
+    }
+  }
+}
