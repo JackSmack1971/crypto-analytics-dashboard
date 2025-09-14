@@ -52,9 +52,12 @@ def _getenv(
 
 def load() -> Settings:
     """Load typed settings from environment variables."""
+    host = _getenv("API_HOST", default="127.0.0.1")
+    if host != "127.0.0.1":  # security guardrail: bind localhost only
+        raise RuntimeError("API_HOST must be 127.0.0.1")
 
     return Settings(
-        api_host=_getenv("API_HOST", default="127.0.0.1"),
+        api_host=host,
         api_port=_getenv("API_PORT", default="8000", cast=int),
         redis_url=_getenv("REDIS_URL", required=True),
         debug=_getenv("DEBUG", default="0", cast=bool),
