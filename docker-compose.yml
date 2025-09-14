@@ -1,0 +1,106 @@
+
+version: "3.9"
+
+services:
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -lc "corepack enable && pnpm install && pnpm dev --port ${FRONTEND_PORT:-3000}"
+    volumes:
+      - ./frontend:/app
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+      - API_BASE=http://127.0.0.1:${API_PORT:-8000}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-lc", "wget -qO- http://127.0.0.1:${FRONTEND_PORT:-3000}/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: "on-failure"
+    profiles: [ "default" ]
+
+  api:
+    image: python:3.12-slim
+    working_dir: /app
+    command: sh -lc "pip install --no-cache-dir uv && uv pip install -e . && uvicorn app.main:app --host 127.0.0.1 --port ${API_PORT:-8000} --reload"
+    volumes:
+      - ./backend:/app
+      - ${DATA_DIR:-./data}:/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - STORAGE_PROFILE=${STORAGE_PROFILE:-DEFAULT}
+      - COMPACTOR_WATERMARK=${COMPACTOR_WATERMARK:-0.65}
+      - REDIS_URL=redis://127.0.0.1:6379/0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4317}
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:${API_PORT:-8000}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${API_PORT:-8000}/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: "on-failure"
+    profiles: [ "default" ]
+
+  worker:
+    image: python:3.12-slim
+    working_dir: /app
+    command: sh -lc "pip install --no-cache-dir uv && uv pip install -e . && python -m worker.run"
+    volumes:
+      - ./worker:/app
+      - ${DATA_DIR:-./data}:/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - STORAGE_PROFILE=${STORAGE_PROFILE:-DEFAULT}
+      - COMPACTOR_WATERMARK=${COMPACTOR_WATERMARK:-0.65}
+      - REDIS_URL=redis://127.0.0.1:6379/0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:4317}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "- <<'PY'
+import os,sys,requests
+sys.exit(0)
+PY"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: "on-failure"
+    profiles: [ "worker" ]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    profiles: [ "default" ]
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./ops/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:13133/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    profiles: [ "ops" ]
