@@ -2,14 +2,13 @@ import os
 import time
 from typing import Annotated, Awaitable, Callable, List
 
-from fastapi import Depends, FastAPI, Header, Path, Request, UploadFile
+from app import config_env
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from redis import Redis
-
-from app import config_env
 
 app = FastAPI(title="Crypto Analytics BFF", version="0.1.0")
 
@@ -23,6 +22,9 @@ app.add_middleware(
 )
 
 START = time.time()
+
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+ALLOWED_MIME_TYPES = {"text/csv"}
 
 
 class ErrorResponse(BaseModel):
@@ -68,6 +70,8 @@ class MempoolData(BaseModel):
 
 ERROR_RESPONSES = {
     400: {"model": ErrorResponse, "description": "Bad Request"},
+    413: {"model": ErrorResponse, "description": "Payload Too Large"},
+    415: {"model": ErrorResponse, "description": "Unsupported Media Type"},
     429: {"model": ErrorResponse, "description": "Too Many Requests"},
     500: {"model": ErrorResponse, "description": "Internal Server Error"},
 }
@@ -162,12 +166,29 @@ async def idempotent_process_import(
     ),
 ) -> ImportResult:
     """Ensure POST imports are idempotent based on the provided key."""
-    if idempotency_key in IDEMPOTENCY_CACHE:
-        return IDEMPOTENCY_CACHE[idempotency_key]
+    error = ErrorResponse(code="client_invalid_contract", message="invalid request")
+    try:
+        if file.content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(status_code=415, detail=error.model_dump())
 
-    result = await process_fn(file)
-    IDEMPOTENCY_CACHE[idempotency_key] = result
-    return result
+        size = 0
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_UPLOAD_SIZE:
+                raise HTTPException(status_code=413, detail=error.model_dump())
+        file.file.seek(0)
+
+        if idempotency_key in IDEMPOTENCY_CACHE:
+            return IDEMPOTENCY_CACHE[idempotency_key]
+
+        result = await process_fn(file)
+        IDEMPOTENCY_CACHE[idempotency_key] = result
+        return result
+    finally:
+        await file.close()
 
 
 async def get_eth_gas_data() -> GasPrices:  # pragma: no cover
