@@ -1,0 +1,4 @@
+[
+  {"Service": "frontend", "State": "running", "Health": "healthy"},
+  {"Service": "api", "State": "running", "Health": "healthy"}
+]
