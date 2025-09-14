@@ -13,6 +13,7 @@ class Settings:
     api_host: str
     api_port: int
     redis_url: str
+    db_url: str
     debug: bool
 
 
@@ -60,5 +61,6 @@ def load() -> Settings:
         api_host=host,
         api_port=_getenv("API_PORT", default="8000", cast=int),
         redis_url=_getenv("REDIS_URL", required=True),
+        db_url=_getenv("DATABASE_URL", required=True),
         debug=_getenv("DEBUG", default="0", cast=bool),
     )
