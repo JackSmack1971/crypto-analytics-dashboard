@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import pytest
 import pytest_asyncio
+from app.db import create_engine, create_session_factory
 from sqlalchemy import Column, Integer, String, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func, select
-
-from app.db import create_engine, create_session_factory
 
 Base = declarative_base()
 
@@ -71,3 +70,20 @@ async def test_rollback_on_error(session: AsyncSession):
 
     count = (await session.execute(select(func.count()).select_from(Item))).scalar()
     assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_parameterized_query_blocks_injection(session: AsyncSession):
+    """Ensure parameterized statements prevent SQL injection attempts."""
+
+    session.add_all([Item(name="foo"), Item(name="bar")])
+    await session.commit()
+
+    # Malicious input attempting SQL injection
+    malicious = "' OR 1=1 --"
+
+    result = await session.execute(
+        text("SELECT name FROM items WHERE name = :name"), {"name": malicious}
+    )
+    rows = result.fetchall()
+    assert rows == []

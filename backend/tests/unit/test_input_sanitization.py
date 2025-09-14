@@ -14,6 +14,14 @@ def test_asset_candles_rejects_sql_payload(client: TestClient) -> None:
     assert body["code"] == "client_invalid_contract"
 
 
+def test_asset_candles_rejects_sql_comment_payload(client: TestClient) -> None:
+    payload = quote("' OR 1=1 --", safe="")
+    response = client.get(f"/assets/{payload}/candles")
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "client_invalid_contract"
+
+
 def test_import_rejects_xss_payload(client: TestClient) -> None:
     payload = "<script>alert('x')</script>"
     files = {"file": ("test.csv", "col\n1\n", "text/csv")}
