@@ -1,9 +1,7 @@
 import os
 import re
-from fastapi import HTTPException
-import pytest
-from fastapi.testclient import TestClient
 
+import pytest
 from app.main import (
     Health,
     app,
@@ -12,7 +10,8 @@ from app.main import (
     get_metrics_data,
     rate_limiter,
 )
-
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.unit
 
@@ -24,6 +23,7 @@ def _clear_overrides() -> None:
 
 
 # Positive tests
+
 
 def test_health_endpoint_structure(client: TestClient) -> None:
     async def override() -> Health:
@@ -42,7 +42,9 @@ def test_health_endpoint_structure(client: TestClient) -> None:
     assert body["uptime"] > 0
 
 
-def test_capabilities_env_toggle(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_capabilities_env_toggle(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async def override() -> dict:
         eth_enabled = bool(os.getenv("ETHERSCAN_API_KEY"))
         btc_enabled = bool(os.getenv("MEMPOOL_SPACE_API_KEY"))
@@ -74,9 +76,7 @@ def test_capabilities_env_toggle(client: TestClient, monkeypatch: pytest.MonkeyP
 def test_metrics_prometheus_format(client: TestClient) -> None:
     async def override() -> str:
         return (
-            "app_uptime_seconds 1.0\n"
-            "rate_limit_clamp 1.0\n"
-            "breaker_open_total 0\n"
+            "app_uptime_seconds 1.0\n" "rate_limit_clamp 1.0\n" "breaker_open_total 0\n"
         )
 
     app.dependency_overrides[get_metrics_data] = override
@@ -91,6 +91,7 @@ def test_metrics_prometheus_format(client: TestClient) -> None:
 
 
 # Negative tests
+
 
 def test_health_missing_dependency() -> None:
     async def broken() -> Health:
@@ -118,6 +119,32 @@ def test_health_rate_limiter_http_exception() -> None:
         _clear_overrides()
 
     assert response.status_code == 429
+
+
+def test_rate_limiter_counts_requests() -> None:
+    class CountingLimiter:
+        """Simple limiter counting calls and raising after threshold."""
+
+        def __init__(self, threshold: int) -> None:
+            self.threshold = threshold
+            self.calls = 0
+
+        def __call__(self) -> None:
+            if self.calls >= self.threshold:
+                raise HTTPException(status_code=429, detail="Too Many Requests")
+            self.calls += 1
+
+    limiter = CountingLimiter(threshold=2)
+    app.dependency_overrides[rate_limiter] = limiter
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        assert client.get("/health").status_code == 200
+        assert client.get("/health").status_code == 200
+        assert client.get("/health").status_code == 429
+    finally:
+        _clear_overrides()
+
+    assert limiter.calls == 2
 
 
 def test_metrics_malformed(client: TestClient) -> None:
