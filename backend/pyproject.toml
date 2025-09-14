@@ -10,5 +10,14 @@ dependencies = [
   "pydantic>=2.8.0"
 ]
 
+[project.optional-dependencies]
+test = [
+  "pytest",
+  "pytest-cov",
+  "pytest-asyncio",
+  "requests-mock",
+  "fakeredis",
+]
+
 [tool.uv]
 # Using uv for fast installs; optional here for local dev.
