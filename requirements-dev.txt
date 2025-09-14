@@ -8,6 +8,7 @@ httpcore==1.0.9
 httpx==0.28.1
 coverage==7.10.6
 fakeredis==2.31.1
+freezegun==1.5.1
 redis==6.4.0
 sortedcontainers==2.4.0
 attrs==25.3.0
