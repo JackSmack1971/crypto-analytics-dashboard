@@ -649,13 +649,23 @@
           "fast": {
             "type": "number",
             "title": "Fast"
+          },
+          "asof": {
+            "type": "number",
+            "title": "Asof"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
           }
         },
         "type": "object",
         "required": [
           "safe",
           "propose",
-          "fast"
+          "fast",
+          "asof",
+          "source"
         ],
         "title": "GasPrices"
       },
@@ -718,12 +728,22 @@
           "size": {
             "type": "integer",
             "title": "Size"
+          },
+          "asof": {
+            "type": "number",
+            "title": "Asof"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
           }
         },
         "type": "object",
         "required": [
           "txs",
-          "size"
+          "size",
+          "asof",
+          "source"
         ],
         "title": "MempoolData"
       },

@@ -1,4 +1,6 @@
 {
   "txs": 1,
-  "size": 512
+  "size": 512,
+  "asof": 1.0,
+  "source": "mempool.space"
 }

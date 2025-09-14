@@ -1,5 +1,7 @@
 {
   "safe": 10.0,
   "propose": 20.0,
-  "fast": 30.0
+  "fast": 30.0,
+  "asof": 1.0,
+  "source": "etherscan"
 }
