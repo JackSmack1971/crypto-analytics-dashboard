@@ -25,7 +25,7 @@ check:
 	@echo "OK"
 
 test:
-	( cd backend && pytest -q || true )
+	( pytest --cov || true )
 	( cd frontend && pnpm test || true )
 
 backup:
