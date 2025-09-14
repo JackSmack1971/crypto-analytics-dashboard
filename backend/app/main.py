@@ -2,12 +2,14 @@ import os
 import time
 from typing import Annotated, Awaitable, Callable, List
 
-from app import config_env
-from fastapi import Depends, FastAPI, Header, UploadFile
+from fastapi import Depends, FastAPI, Header, Path, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from redis import Redis
+
+from app import config_env
 
 app = FastAPI(title="Crypto Analytics BFF", version="0.1.0")
 
@@ -65,9 +67,20 @@ class MempoolData(BaseModel):
 
 
 ERROR_RESPONSES = {
+    400: {"model": ErrorResponse, "description": "Bad Request"},
     429: {"model": ErrorResponse, "description": "Too Many Requests"},
     500: {"model": ErrorResponse, "description": "Internal Server Error"},
 }
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Return structured error responses for validation failures."""
+
+    error = ErrorResponse(code="client_invalid_contract", message="invalid request")
+    return JSONResponse(status_code=400, content=error.model_dump())
 
 
 def rate_limiter() -> None:  # pragma: no cover
@@ -196,7 +209,7 @@ async def capabilities(
     responses=ERROR_RESPONSES,
 )
 async def asset_candles(
-    asset_id: str,
+    asset_id: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,64}$")],
     candles: List[Candle] = Depends(fetch_candles),
     _: None = Depends(rate_limiter),
 ):
