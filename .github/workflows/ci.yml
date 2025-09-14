@@ -25,6 +25,8 @@ jobs:
         run: uv pip install -e backend[test]
       - name: Install frontend dependencies
         run: cd frontend && pnpm install
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps
       - name: Run tests
         run: make test
       - name: Run e2e tests
