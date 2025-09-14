@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "DATA_CONTRACTS/schemas/transactions.v1.1.schema.json",
+  "type": "object",
+  "required": ["id", "timestamp", "action", "asset_id", "quantity", "account"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid", "description": "UUIDv7" },
+    "timestamp": { "type": "string", "format": "date-time", "description": "UTC ISO" },
+    "action": {
+      "type": "string",
+      "enum": [
+        "BUY",
+        "SELL",
+        "TRANSFER_IN",
+        "TRANSFER_OUT",
+        "FEE",
+        "STAKING_REWARD",
+        "AIRDROP",
+        "INCOME"
+      ]
+    },
+    "asset_id": { "type": "string" },
+    "quantity": { "type": "number" },
+    "unit_price_usd": { "type": ["number", "null"] },
+    "fee_asset": { "type": ["string", "null"] },
+    "fee_amount": { "type": ["number", "null"] },
+    "account": { "type": "string" },
+    "wallet": { "type": ["string", "null"] },
+    "venue": { "type": ["string", "null"] },
+    "tx_hash": { "type": ["string", "null"] },
+    "external_id": { "type": ["string", "null"] },
+    "notes": { "type": ["string", "null"] }
+  },
+  "x-idempotency": {
+    "oneOf": [
+      { "required": ["account", "tx_hash"] },
+      { "required": ["external_id"] },
+      { "required": ["id"] }
+    ]
+  }
+}
