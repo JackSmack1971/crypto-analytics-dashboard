@@ -24,9 +24,9 @@
 ## 3. Architectural Patterns & Structure
 *   **Overall Architecture:** Three-tier local-first architecture with strict localhost binding. Next.js UI calls FastAPI BFF which coordinates with Python worker processes. All external provider calls are rate-limited and circuit-broken. Data flows: CSV import → SQLite → Worker snapshots → Parquet → DuckDB views → UI charts.
 *   **Directory Structure Philosophy:**
-    *   `/frontend`: Next.js App Router UI with components, pages, and Operator Console
-    *   `/backend`: FastAPI BFF handling HTTP API, rate limiting, and provider coordination  
-    *   `/worker`: Python processes for data ingestion, normalization, valuation, and Parquet generation
+    *   `/frontend`: Next.js App Router UI with components, pages, and Operator Console (see `frontend/AGENTS.md`)
+    *   `/backend`: FastAPI BFF handling HTTP API, rate limiting, and provider coordination (see `backend/AGENTS.md`)
+    *   `/worker`: Python processes for data ingestion, normalization, valuation, and Parquet generation (see `worker/AGENTS.md`)
     *   `/docs`: Comprehensive project documentation including contracts, security, and operational guides
     *   `/registry`: Asset registry (JSON-first, authoritative) for seeding database
     *   `/data`: Runtime data directory for SQLite, Parquet files, and backups
@@ -128,34 +128,79 @@
     - Gitleaks CI gate prevents secret leakage
 
 ## 8. Specific Agent Instructions & Known Issues
-*   **Tool Usage:**
-    - Use `uv` for Python dependency management instead of `pip` or `virtualenv`
-    - Use `pnpm` for Node.js packages, never `npm` or `yarn`
-    - Use Docker Compose for local development environment
-*   **Context Management:** 
-    - For large changes affecting >5 files, break into smaller, focused PRs
-    - Create implementation plan first, then execute incrementally
-    - Each PR should be self-contained and testable
-*   **Quality Assurance & Verification:** 
-    - **ALWAYS** run the full test suite after making changes
-    - Verify backup/restore functionality works: `make backup.verify`
-    - Check `/metrics` endpoint returns valid Prometheus format
-    - Validate rate limiting works under synthetic 429/5xx conditions
-    - **DO NOT** report completion until ALL programmatic checks pass
-*   **Project-Specific Quirks:**
-    - **NEVER forward-fill time series data** - always preserve data granularity with `{resolution, asof, source}`
-    - Transfers between accounts must preserve acquisition dates and produce **no P&L**
-    - FEE transactions must always include negative quantity FEE rows
-    - Rate limiting clamps are bounded: min 50%, max 100%, step 10%
-    - All UUIDs must be UUIDv7 format for time-sortable properties
-*   **Forbidden Patterns:**
-    - **NEVER** use `@ts-expect-error` or `@ts-ignore` to suppress TypeScript errors
-    - **DO NOT** bind services to 0.0.0.0 or external interfaces
-    - **NEVER** log or expose sensitive data (API keys, transaction details)
-    - **DO NOT** implement forward-fill for missing price data
-    - **NEVER** allow CSV formula execution or unsafe deserialization
-*   **Troubleshooting & Debugging:** 
-    - If tests fail, provide the **full stack trace** for proper debugging
-    - Use structured logging with `trace_id` correlation for distributed tracing
-    - Check Operator Console status cards for system health issues
-    - Validate backup integrity with `make backup.verify` if data corruption suspected
+
+### Cross-Component Coordination
+*   **Service Dependencies:** Frontend → Backend API → Worker processes → Data stores
+*   **Data Flow:** CSV upload → API validation → Worker processing → Parquet generation → UI display
+*   **State Synchronization:** Use database state and Redis for coordination between services
+*   **Error Propagation:** Failures in worker processes should be visible in UI through API layer
+
+### Tool Usage
+*   Use `uv` for Python dependency management instead of `pip` or `virtualenv`
+*   Use `pnpm` for Node.js packages, never `npm` or `yarn`
+*   Use Docker Compose for local development environment
+*   **Component-Specific Tools:** See nested `AGENTS.md` files for component-specific tooling
+
+### Context Management
+*   For large changes affecting >5 files, break into smaller, focused PRs
+*   Create implementation plan first, then execute incrementally
+*   Each PR should be self-contained and testable
+*   **Use nested AGENTS.md files** for component-specific context and requirements
+
+### Quality Assurance & Verification
+*   **ALWAYS** run the full test suite after making changes
+*   Verify backup/restore functionality works: `make backup.verify`
+*   Check `/metrics` endpoint returns valid Prometheus format
+*   Validate rate limiting works under synthetic 429/5xx conditions
+*   **DO NOT** report completion until ALL programmatic checks pass
+
+### Project-Specific Business Rules (CRITICAL)
+*   **NEVER forward-fill time series data** - always preserve data granularity with `{resolution, asof, source}`
+*   **Transfer transactions** between accounts must preserve acquisition dates and produce **no P&L**
+*   **FEE transactions** must always include negative quantity FEE rows for proper accounting
+*   **Rate limiting clamps** are bounded: min 50%, max 100%, step 10% adjustments
+*   **All UUIDs** must be UUIDv7 format for time-sortable properties
+*   **Provider 403 responses** trigger complete freeze until manual operator recovery
+
+### Data Classification & Handling
+*   **Secret:** `.env` files, API keys, credentials - never log or expose
+*   **Confidential:** CSV transaction data, Parquet analytics, portfolio details
+*   **Internal:** System logs, metrics, configuration files
+*   **Public:** API documentation, general system status
+
+### Operational Requirements
+*   **Localhost Binding:** All services MUST bind to 127.0.0.1 only - security requirement
+*   **Capabilities Gating:** ETH gas/BTC mempool panels only show when provider keys present
+*   **Operator Console:** Must provide real-time status and controls for all system components
+*   **Backup & Recovery:** Nightly backups at 02:30, weekly restore drills, integrity verification
+
+### Forbidden Patterns (NEVER DO THESE)
+*   **NEVER** use `@ts-expect-error` or `@ts-ignore` to suppress TypeScript errors
+*   **DO NOT** bind services to 0.0.0.0 or external interfaces - security violation
+*   **NEVER** log or expose sensitive data (API keys, transaction details, personal info)
+*   **DO NOT** implement forward-fill for missing price data - data integrity requirement
+*   **NEVER** allow CSV formula execution or unsafe deserialization - security requirement
+*   **DO NOT** make provider API calls without rate limiting and circuit breaking
+*   **NEVER** ignore backup verification failures or skip restore drills
+
+### Component-Specific Guidelines
+*   **Frontend Development:** See `frontend/AGENTS.md` for UI-specific patterns, component requirements, and accessibility standards
+*   **Backend API Development:** See `backend/AGENTS.md` for FastAPI patterns, rate limiting implementation, and provider integration
+*   **Worker Development:** See `worker/AGENTS.md` for data processing workflows, Parquet management, and analytics pipeline requirements
+
+### Troubleshooting & Debugging
+*   If tests fail, provide the **full stack trace** for proper debugging
+*   Use structured logging with `trace_id` correlation for distributed tracing
+*   Check Operator Console status cards for system health issues
+*   Validate backup integrity with `make backup.verify` if data corruption suspected
+*   Monitor `/metrics` endpoint for rate limiting, circuit breaker, and performance issues
+
+### Performance & Reliability Targets
+*   **API Latency:** p95 < 250ms, p99 < 600ms
+*   **Charts:** p95 < 900ms, p99 < 1.8s  
+*   **Portfolio:** p95 < 1.2s, p99 < 2.5s
+*   **Availability:** >99.5% success rate (24h window)
+*   **Cache Effectiveness:** >70% hit rate
+*   **Recovery:** <5min breaker MTTR
+
+This guide serves as the authoritative reference for the entire project. For component-specific details, consult the nested `AGENTS.md` files in each major subdirectory.
