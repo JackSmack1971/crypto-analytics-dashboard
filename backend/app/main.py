@@ -3,6 +3,7 @@ import time
 from typing import Annotated, Awaitable, Callable, List
 
 from app import config_env
+from app.fx_stub import deterministic_rate
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,6 +69,14 @@ class GasPrices(BaseModel):
 class MempoolData(BaseModel):
     txs: int
     size: int
+    asof: float
+    source: str
+
+
+class FXRate(BaseModel):
+    base: str
+    quote: str
+    rate: float
     asof: float
     source: str
 
@@ -209,6 +218,16 @@ async def get_btc_mempool_data() -> MempoolData:  # pragma: no cover
     return MempoolData(txs=0, size=0, asof=time.time(), source="mock")
 
 
+async def get_fx_rate_data(
+    base: Annotated[str, Path(pattern=r"^[A-Z]{3}$")],
+    quote: Annotated[str, Path(pattern=r"^[A-Z]{3}$")],
+) -> FXRate:
+    """Return deterministic FX rate data for the given currency pair."""
+
+    rate = deterministic_rate(base, quote)
+    return FXRate(base=base, quote=quote, rate=rate, asof=time.time(), source="stub")
+
+
 async def get_metrics_data() -> str:  # pragma: no cover
     return (
         "content-type=text/plain; version=0.0.4\n"
@@ -257,6 +276,18 @@ async def portfolio_import(
     _: None = Depends(rate_limiter),
 ) -> ImportResult:
     return result
+
+
+@app.get(
+    "/fx/{base}/{quote}",
+    response_model=FXRate,
+    responses=ERROR_RESPONSES,
+)
+async def fx_rate(
+    data: FXRate = Depends(get_fx_rate_data),
+    _: None = Depends(rate_limiter),
+) -> FXRate:
+    return data
 
 
 @app.get("/onchain/eth/gas", response_model=GasPrices, responses=ERROR_RESPONSES)
