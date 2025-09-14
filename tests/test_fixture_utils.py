@@ -1,9 +1,15 @@
 from io import BytesIO
 
 import pandas as pd
+import pytest
 
-from tests.utils import (generate_uuid7, read_fixture, simulate_db_state,
-                         simulate_redis_state)
+from tests.utils import (
+    assert_uuid7,
+    generate_uuid7,
+    read_fixture,
+    simulate_db_state,
+    simulate_redis_state,
+)
 
 
 def test_read_fixture_json():
@@ -24,7 +30,12 @@ def test_read_fixture_parquet():
 
 def test_generate_uuid7():
     uid = generate_uuid7()
-    assert len(uid) == 36 and uid[14] == "7"
+    assert_uuid7(uid)
+
+
+def test_assert_uuid7_invalid():
+    with pytest.raises(AssertionError):
+        assert_uuid7("not-a-uuid")
 
 
 def test_simulated_states():

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -46,9 +47,30 @@ def generate_uuid7() -> str:
     time_high = ts_hex[:8]
     time_mid = ts_hex[8:12]
     time_low = ts_hex[12:15]
-    rand_hex = os.urandom(10).hex()
-    variant = "8"
-    return f"{time_high}-{time_mid}-7{time_low}-{variant}{rand_hex[:3]}-{rand_hex[3:]}"
+    rand_hex = os.urandom(8).hex()
+    variant = "8"  # '10xx' variant
+    return (
+        f"{time_high}-{time_mid}-7{time_low}-{variant}{rand_hex[:3]}-{rand_hex[3:15]}"
+    )
+
+
+UUID_V7_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+)
+
+
+def assert_uuid7(value: str) -> None:
+    """Assert that ``value`` is a valid UUIDv7 string.
+
+    Args:
+        value: UUID string to validate.
+
+    Raises:
+        AssertionError: If the value does not match UUIDv7 format.
+    """
+
+    if not UUID_V7_PATTERN.fullmatch(value):
+        raise AssertionError(f"{value!r} is not a valid UUIDv7")
 
 
 def simulate_redis_state(initial: Optional[Dict[str, str]] = None) -> Dict[str, str]:
