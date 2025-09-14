@@ -9,6 +9,7 @@ export default defineConfig({
     environment: 'jsdom', // Simulate browser for React Testing Library
     globals: true,
     setupFiles: './tests/setup.ts',
+    exclude: ['tests/e2e/**'],
     coverage: {
       reporter: ['text', 'lcov'],
     },
