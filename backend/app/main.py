@@ -2,14 +2,23 @@ import os
 import time
 from typing import Annotated, Awaitable, Callable, List
 
+from app import config_env
 from fastapi import Depends, FastAPI, Header, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from redis import Redis
 
-from app import config_env
-
 app = FastAPI(title="Crypto Analytics BFF", version="0.1.0")
+
+ALLOWED_ORIGINS = ["http://127.0.0.1:3000", "http://localhost:3000"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 START = time.time()
 
