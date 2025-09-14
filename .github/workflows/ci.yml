@@ -17,10 +17,12 @@ jobs:
         with:
           node-version: '20'
       - run: corepack enable
+      - name: Install uv
+        run: pip install uv
+      - name: Set up uv virtual environment
+        run: uv venv
       - name: Install backend dependencies
-        run: |
-          pip install uv
-          uv pip install -e backend[test]
+        run: uv pip install -e backend[test]
       - name: Install frontend dependencies
         run: cd frontend && pnpm install
       - name: Run tests
