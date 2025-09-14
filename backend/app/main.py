@@ -1,8 +1,8 @@
 import os
 import time
-from typing import List
+from typing import Annotated, Awaitable, Callable, List
 
-from fastapi import Depends, FastAPI, UploadFile
+from fastapi import Depends, FastAPI, Header, UploadFile
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
@@ -101,6 +101,35 @@ async def process_import(file: UploadFile) -> ImportResult:  # pragma: no cover
     return ImportResult(imported=1)
 
 
+def get_process_import() -> Callable[[UploadFile], Awaitable[ImportResult]]:
+    """Return the CSV import processor to allow overriding in tests."""
+    return process_import
+
+
+IdempotencyKey = Annotated[
+    str, Header(alias="Idempotency-Key", pattern=r"^[A-Za-z0-9_-]{1,255}$")
+]
+
+# In-memory cache to store results for processed idempotency keys
+IDEMPOTENCY_CACHE: dict[str, ImportResult] = {}
+
+
+async def idempotent_process_import(
+    file: UploadFile,
+    idempotency_key: IdempotencyKey,
+    process_fn: Callable[[UploadFile], Awaitable[ImportResult]] = Depends(
+        get_process_import
+    ),
+) -> ImportResult:
+    """Ensure POST imports are idempotent based on the provided key."""
+    if idempotency_key in IDEMPOTENCY_CACHE:
+        return IDEMPOTENCY_CACHE[idempotency_key]
+
+    result = await process_fn(file)
+    IDEMPOTENCY_CACHE[idempotency_key] = result
+    return result
+
+
 async def get_eth_gas_data() -> GasPrices:  # pragma: no cover
     return GasPrices(safe=1.0, propose=2.0, fast=3.0)
 
@@ -153,10 +182,9 @@ async def asset_candles(
     responses=ERROR_RESPONSES,
 )
 async def portfolio_import(
-    file: UploadFile,
-    result: ImportResult = Depends(process_import),
+    result: ImportResult = Depends(idempotent_process_import),
     _: None = Depends(rate_limiter),
-):
+) -> ImportResult:
     return result
 
 
