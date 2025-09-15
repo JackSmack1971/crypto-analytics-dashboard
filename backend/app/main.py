@@ -1,9 +1,11 @@
 import os
+import math
 import time
 from typing import Annotated, Awaitable, Callable, List
 
 from app import config_env
 from app.fx_stub import deterministic_rate
+from app.rate_limiting import acquire
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -100,8 +102,22 @@ async def validation_exception_handler(
     return JSONResponse(status_code=400, content=error.model_dump())
 
 
-def rate_limiter() -> None:  # pragma: no cover
-    """Rate limiter dependency to allow override in tests."""
+def rate_limiter(request: Request) -> None:
+    """Enforce provider budgets with token buckets.
+
+    Provider name is taken from ``X-Provider`` header, defaulting to
+    ``coingecko``. On depletion a 429 with ``Retry-After`` is raised.
+    """
+
+    provider = request.headers.get("X-Provider", "coingecko")
+    allowed, retry_after = acquire(provider, request.url.path)
+    if not allowed:
+        error = ErrorResponse(code="provider_throttled", message="rate limit exceeded")
+        raise HTTPException(
+            status_code=429,
+            detail=error.model_dump(),
+            headers={"Retry-After": str(math.ceil(retry_after))},
+        )
 
 
 def get_redis_client() -> Redis:

@@ -10,6 +10,7 @@ from app.main import (
     get_metrics_data,
     rate_limiter,
 )
+from app.rate_limiting import init
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -22,6 +23,18 @@ def _clear_overrides() -> None:
     app.dependency_overrides.clear()
 
 
+def _time_controller(start: float = 0.0):
+    current = {"value": start}
+
+    def now() -> float:
+        return current["value"]
+
+    def advance(seconds: float) -> None:
+        current["value"] += seconds
+
+    return now, advance
+
+
 # Positive tests
 
 
@@ -30,6 +43,7 @@ def test_health_endpoint_structure(client: TestClient) -> None:
         return Health(status="ok", versions={"app": "test"}, uptime=1.23)
 
     app.dependency_overrides[get_health_data] = override
+    app.dependency_overrides[rate_limiter] = lambda request: None
     try:
         response = client.get("/health")
     finally:
@@ -55,6 +69,7 @@ def test_capabilities_env_toggle(
         }
 
     app.dependency_overrides[get_capabilities_data] = override
+    app.dependency_overrides[rate_limiter] = lambda request: None
     try:
         # No env vars set -> disabled
         monkeypatch.delenv("ETHERSCAN_API_KEY", raising=False)
@@ -80,6 +95,7 @@ def test_metrics_prometheus_format(client: TestClient) -> None:
         )
 
     app.dependency_overrides[get_metrics_data] = override
+    app.dependency_overrides[rate_limiter] = lambda request: None
     try:
         response = client.get("/metrics")
     finally:
@@ -98,6 +114,7 @@ def test_health_missing_dependency() -> None:
         raise RuntimeError("missing dependency")
 
     app.dependency_overrides[get_health_data] = broken
+    app.dependency_overrides[rate_limiter] = lambda request: None
     client = TestClient(app, raise_server_exceptions=False)
     try:
         response = client.get("/health")
@@ -152,6 +169,7 @@ def test_metrics_malformed(client: TestClient) -> None:
         return "not-prometheus"
 
     app.dependency_overrides[get_metrics_data] = malformed
+    app.dependency_overrides[rate_limiter] = lambda request: None
     try:
         response = client.get("/metrics")
     finally:
@@ -159,3 +177,41 @@ def test_metrics_malformed(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert not PROM_RE.match(response.text)
+
+
+def test_retry_after_header(client: TestClient, fake_redis) -> None:
+    now, _ = _time_controller()
+    init(fake_redis, time_func=now)
+    headers = {"X-Provider": "coingecko"}
+    app.dependency_overrides.pop(rate_limiter, None)
+    try:
+        for _ in range(5):
+            assert client.get("/health", headers=headers).status_code == 200
+        resp = client.get("/health", headers=headers)
+        assert resp.status_code == 429
+        assert resp.headers["Retry-After"] == "1"
+    finally:
+        _clear_overrides()
+
+
+def test_separate_provider_budgets(client: TestClient, fake_redis) -> None:
+    now, _ = _time_controller()
+    init(fake_redis, time_func=now)
+    app.dependency_overrides.pop(rate_limiter, None)
+    try:
+        for _ in range(5):
+            assert (
+                client.get("/health", headers={"X-Provider": "coingecko"}).status_code
+                == 200
+            )
+        assert (
+            client.get("/health", headers={"X-Provider": "coingecko"}).status_code
+            == 429
+        )
+        for _ in range(5):
+            assert (
+                client.get("/health", headers={"X-Provider": "etherscan"}).status_code
+                == 200
+            )
+    finally:
+        _clear_overrides()

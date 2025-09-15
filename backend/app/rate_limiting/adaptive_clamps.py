@@ -72,3 +72,9 @@ class AdaptiveClamp:
             state.last_adjust = now
 
         return state.clamp
+
+    def get(self, provider: str) -> float:
+        """Return current clamp for ``provider`` without modifying state."""
+
+        state = self.states.get(provider)
+        return state.clamp if state else MAX_CLAMP

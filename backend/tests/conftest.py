@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
-from app.main import app  # noqa: E402
+from app.main import app, rate_limiter  # noqa: E402
 
 FIXTURES_PATH = Path(__file__).parent / "fixtures"
 PROVIDER_FIXTURES_PATH = FIXTURES_PATH / "providers"
@@ -19,7 +19,11 @@ PROVIDER_FIXTURES_PATH = FIXTURES_PATH / "providers"
 def client() -> TestClient:  # pragma: no cover
     """FastAPI test client."""
     with TestClient(app) as test_client:
-        yield test_client
+        app.dependency_overrides[rate_limiter] = lambda request: None
+        try:
+            yield test_client
+        finally:
+            app.dependency_overrides.clear()
 
 
 @pytest.fixture

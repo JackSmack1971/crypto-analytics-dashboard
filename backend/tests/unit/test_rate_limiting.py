@@ -2,6 +2,7 @@
 from redis.exceptions import RedisError
 
 from app.rate_limiting import AdaptiveClamp, acquire, adjust_clamp, init
+from app.rate_limiting.provider_budgets import ProviderBudget
 
 
 def _time_controller(start: float = 0.0):
@@ -18,11 +19,14 @@ def _time_controller(start: float = 0.0):
 
 def test_token_bucket_acquire(fake_redis):
     now, advance = _time_controller()
-    init(fake_redis, capacity=1, refill_rate=1, time_func=now)
-    assert acquire("cg", "/foo")
-    assert not acquire("cg", "/foo")
+    init(fake_redis, budgets={"coingecko": ProviderBudget(per_sec=1)}, time_func=now)
+    allowed, _ = acquire("coingecko", "/foo")
+    assert allowed
+    allowed, _ = acquire("coingecko", "/foo")
+    assert not allowed
     advance(1)
-    assert acquire("cg", "/foo")
+    allowed, _ = acquire("coingecko", "/foo")
+    assert allowed
 
 
 def test_redis_failure_fallback():
@@ -34,11 +38,18 @@ def test_redis_failure_fallback():
             raise RedisError("boom")
 
     now, advance = _time_controller()
-    init(FailingRedis(), capacity=1, refill_rate=1, time_func=now)
-    assert acquire("cg", "/bar")
-    assert not acquire("cg", "/bar")
+    init(
+        FailingRedis(),
+        budgets={"coingecko": ProviderBudget(per_sec=1)},
+        time_func=now,
+    )
+    allowed, _ = acquire("coingecko", "/bar")
+    assert allowed
+    allowed, _ = acquire("coingecko", "/bar")
+    assert not allowed
     advance(1)
-    assert acquire("cg", "/bar")
+    allowed, _ = acquire("coingecko", "/bar")
+    assert allowed
 
 
 def test_clamp_hysteresis(monkeypatch):

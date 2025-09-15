@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict
 
 from redis import Redis
 from redis.exceptions import RedisError
@@ -33,7 +33,7 @@ class TokenBucket:
     def __init__(
         self,
         redis_client: Redis,
-        capacity: int,
+        capacity: float,
         refill_rate: float,
         *,
         time_func: Callable[[], float] | None = None,
@@ -45,11 +45,12 @@ class TokenBucket:
         self.local_buckets: Dict[str, Tuple[float, float]] = {}
 
     # Security: No secrets stored; fallback prevents unlimited calls on Redis outage.
-    def acquire(self, key: str, tokens: int = 1) -> bool:
-        """Attempt to take tokens from the bucket.
+    def acquire(self, key: str, tokens: float = 1.0) -> tuple[bool, float]:
+        """Attempt to take ``tokens`` from the bucket.
 
-        Returns ``True`` if enough tokens were available, ``False`` otherwise.
-        On Redis errors the function falls back to a process-local bucket.
+        Returns a tuple ``(allowed, retry_after)`` where ``retry_after`` is the
+        number of seconds until the next token will be available when the
+        request is denied.
         """
 
         now = self.time()
@@ -68,22 +69,30 @@ class TokenBucket:
             delta = max(0.0, now - last) * self.refill_rate
             available = min(self.capacity, available + delta)
             allowed = available >= tokens
+            retry_after = 0.0
             if allowed:
                 available -= tokens
+            else:
+                deficit = tokens - available
+                retry_after = deficit / self.refill_rate if self.refill_rate > 0 else float("inf")
             self.redis.set(key, json.dumps([available, now]))
-            return allowed
+            return allowed, retry_after
         except RedisError:
             # Fallback to in-process bucket on Redis failure
             return self._acquire_local(key, now, tokens)
 
-    def _acquire_local(self, key: str, now: float, tokens: int) -> bool:
+    def _acquire_local(self, key: str, now: float, tokens: float) -> tuple[bool, float]:
         """Local in-memory bucket used when Redis is unavailable."""
 
         available, last = self.local_buckets.get(key, (self.capacity, now))
         delta = max(0.0, now - last) * self.refill_rate
         available = min(self.capacity, available + delta)
         allowed = available >= tokens
+        retry_after = 0.0
         if allowed:
             available -= tokens
+        else:
+            deficit = tokens - available
+            retry_after = deficit / self.refill_rate if self.refill_rate > 0 else float("inf")
         self.local_buckets[key] = (available, now)
-        return allowed
+        return allowed, retry_after
