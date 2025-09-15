@@ -1,4 +1,7 @@
+import logging
+
 import pytest
+
 from app.rate_limiting.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerOpen,
@@ -75,7 +78,41 @@ async def test_manual_open_close():
     with pytest.raises(CircuitBreakerOpen):
         await breaker.call(success)
 
-    breaker.force_close()
+    breaker.reset()
     result = await breaker.call(success)
     assert result == 1
+    assert breaker.state is CircuitState.CLOSED
+
+
+@pytest.mark.asyncio
+async def test_freeze_on_403_requires_reset(caplog):
+    now = 0.0
+
+    def time_func() -> float:
+        return now
+
+    breaker = CircuitBreaker(failure_threshold=1, probe_interval=1, time_func=time_func)
+
+    class Resp:
+        status_code = 403
+
+    class ForbiddenError(Exception):
+        def __init__(self) -> None:
+            self.response = Resp()
+
+    async def forbidden():
+        raise ForbiddenError()
+
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(ForbiddenError):
+            await breaker.call(forbidden, trace_id="t1")
+    assert breaker.state is CircuitState.OPEN
+    assert "breaker frozen" in caplog.text
+
+    now += 10
+    with pytest.raises(CircuitBreakerOpen):
+        await breaker.call(forbidden)
+
+    breaker.reset(trace_id="t1")
+    assert "breaker reset" in caplog.text
     assert breaker.state is CircuitState.CLOSED
