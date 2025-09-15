@@ -7,7 +7,19 @@ from typing import Callable, Optional
 from redis import Redis
 
 from .adaptive_clamps import AdaptiveClamp
+from .circuit_breaker import CircuitBreaker, CircuitBreakerOpen, CircuitState
 from .token_bucket import TokenBucket
+
+__all__ = [
+    "AdaptiveClamp",
+    "CircuitBreaker",
+    "CircuitBreakerOpen",
+    "CircuitState",
+    "TokenBucket",
+    "init",
+    "acquire",
+    "adjust_clamp",
+]
 
 _bucket: Optional[TokenBucket] = None
 _clamp = AdaptiveClamp()
