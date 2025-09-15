@@ -7,6 +7,7 @@ controls, and raises :class:`CircuitBreakerOpen` when the breaker blocks calls.
 
 from __future__ import annotations
 
+import logging
 import time
 from enum import Enum
 from typing import Awaitable, Callable, Generic, Optional, TypeVar
@@ -53,6 +54,8 @@ class CircuitBreaker(Generic[T]):
         self._failures = 0
         self._state: CircuitState = CircuitState.CLOSED
         self._opened_at: Optional[float] = None
+        self._frozen = False
+        self._log = logging.getLogger("app.circuit_breaker")
 
     @property
     def state(self) -> CircuitState:
@@ -66,15 +69,23 @@ class CircuitBreaker(Generic[T]):
 
         self._state = CircuitState.OPEN
         self._opened_at = self.time()
+        self._frozen = False
 
-    def force_close(self) -> None:
-        """Manually close the circuit and reset counters."""
+    def reset(self, *, trace_id: str | None = None) -> None:
+        """Manually close the circuit and clear freeze state."""
 
         self._state = CircuitState.CLOSED
         self._failures = 0
         self._opened_at = None
+        self._frozen = False
+        self._log.info("breaker reset", extra={"trace_id": trace_id})
 
-    async def call(self, func: Callable[[], Awaitable[T]]) -> T:
+    # Backwards compatibility
+    force_close = reset
+
+    async def call(
+        self, func: Callable[[], Awaitable[T]], *, trace_id: str | None = None
+    ) -> T:
         """Execute ``func`` respecting circuit breaker state.
 
         Raises
@@ -87,7 +98,7 @@ class CircuitBreaker(Generic[T]):
 
         now = self.time()
         if self._state is CircuitState.OPEN:
-            if (
+            if not self._frozen and (
                 self._opened_at is not None
                 and now - self._opened_at >= self.probe_interval
             ):
@@ -97,9 +108,15 @@ class CircuitBreaker(Generic[T]):
 
         try:
             result = await func()
-        except Exception:
+        except Exception as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
             self._failures += 1
-            if (
+            if status == 403:
+                self._state = CircuitState.OPEN
+                self._opened_at = now
+                self._frozen = True
+                self._log.info("breaker frozen", extra={"trace_id": trace_id})
+            elif (
                 self._state is CircuitState.HALF_OPEN
                 or self._failures >= self.failure_threshold
             ):

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict
 
 from redis import Redis
 
 from .adaptive_clamps import AdaptiveClamp
 from .circuit_breaker import CircuitBreaker, CircuitBreakerOpen, CircuitState
-from .token_bucket import TokenBucket
 from .provider_budgets import DEFAULT_BUDGETS, ProviderBudget
+from .token_bucket import TokenBucket
 
 __all__ = [
     "AdaptiveClamp",
@@ -20,11 +20,14 @@ __all__ = [
     "init",
     "acquire",
     "adjust_clamp",
+    "register_breaker",
+    "get_breaker",
 ]
 
 _buckets: Dict[tuple[str, str], TokenBucket] = {}
 _budgets: Dict[str, ProviderBudget] = DEFAULT_BUDGETS.copy()
 _clamp = AdaptiveClamp()
+_breakers: Dict[str, CircuitBreaker[Any]] = {}
 
 
 def init(
@@ -94,3 +97,15 @@ def adjust_clamp(provider: str, success: bool) -> float:
     """Adjust and return the clamp for ``provider``."""
 
     return _clamp.adjust(provider, success)
+
+
+def register_breaker(provider: str, breaker: CircuitBreaker[Any]) -> None:
+    """Register a circuit breaker for ``provider``."""
+
+    _breakers[provider] = breaker
+
+
+def get_breaker(provider: str) -> CircuitBreaker[Any] | None:
+    """Return the registered breaker for ``provider`` if present."""
+
+    return _breakers.get(provider)

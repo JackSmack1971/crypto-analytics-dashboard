@@ -1,17 +1,19 @@
-import os
 import math
+import os
 import time
+import uuid
 from typing import Annotated, Awaitable, Callable, List
 
-from app import config_env
-from app.fx_stub import deterministic_rate
-from app.rate_limiting import acquire
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from redis import Redis
+
+from app import config_env
+from app.fx_stub import deterministic_rate
+from app.rate_limiting import acquire, get_breaker
 
 app = FastAPI(title="Crypto Analytics BFF", version="0.1.0")
 
@@ -118,6 +120,24 @@ def rate_limiter(request: Request) -> None:
             detail=error.model_dump(),
             headers={"Retry-After": str(math.ceil(retry_after))},
         )
+
+
+def get_trace_id(request: Request) -> str:
+    """Return or generate a trace identifier."""
+
+    return request.headers.get("X-Trace-Id", uuid.uuid4().hex)
+
+
+def operator_auth(
+    authorization: str | None = Header(None), trace_id: str = Depends(get_trace_id)
+) -> None:
+    """Authenticate operator actions with a fixed token stub."""
+
+    if authorization != "Bearer operator":
+        error = ErrorResponse(
+            code="unauthorized", message="auth required", trace_id=trace_id
+        )
+        raise HTTPException(status_code=401, detail=error.model_dump())
 
 
 def get_redis_client() -> Redis:
@@ -324,6 +344,25 @@ async def onchain_btc_mempool(
     _: None = Depends(rate_limiter),
 ):
     return data
+
+
+@app.post(
+    "/operator/breaker/{provider}/reset",
+    responses=ERROR_RESPONSES,
+)
+async def operator_breaker_reset(
+    provider: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,64}$")],
+    trace_id: str = Depends(get_trace_id),
+    _: None = Depends(operator_auth),
+):
+    breaker = get_breaker(provider)
+    if breaker is None:
+        error = ErrorResponse(
+            code="unknown_provider", message="unknown provider", trace_id=trace_id
+        )
+        raise HTTPException(status_code=404, detail=error.model_dump())
+    breaker.reset(trace_id=trace_id)
+    return {"status": "reset"}
 
 
 @app.get("/metrics", response_class=PlainTextResponse, responses=ERROR_RESPONSES)
